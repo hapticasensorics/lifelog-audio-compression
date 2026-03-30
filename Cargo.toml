@@ -1,0 +1,24 @@
+[package]
+name = "lifelog-audio-compression"
+version = "0.1.0"
+edition = "2024"
+description = "Opinionated speech-first audio compression for lifelog archives"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/hapticasensorics/lifelog-audio-compression"
+homepage = "https://github.com/hapticasensorics/lifelog-audio-compression"
+documentation = "https://github.com/hapticasensorics/lifelog-audio-compression"
+keywords = ["audio", "opus", "speech", "lifelog", "compression"]
+categories = ["multimedia::audio", "command-line-utilities"]
+
+[lib]
+name = "lifelog_audio_compression"
+path = "src/lib.rs"
+
+[[bin]]
+name = "lifelog-audio-compression"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
