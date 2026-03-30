@@ -28,3 +28,9 @@ Library entry points:
 - `compress_to_dir(input, output_dir)`
 - `compress_directory_to_dir(input_root, output_root)`
 - `load_bundle_metadata(bundle_dir)`
+
+Each bundle also keeps raw source metadata artifacts alongside the compressed derivative:
+
+- `source-ffprobe.json`
+- `source-mdls.txt`
+- `source-xattrs.txt`

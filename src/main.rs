@@ -16,6 +16,7 @@ Commands:
       - mono
       - 16 kHz
       - Opus
+      - preserve intrinsic source metadata and raw metadata artifacts
       - one input audio -> one output bundle
 
   batch <input-dir> <output-root>
@@ -41,6 +42,7 @@ fn print_spec() {
 - sample rate: {rate} Hz
 - channels: {channels}
 - bitrate: {bitrate}
+- preserve intrinsic source metadata and raw source metadata artifacts
 - one input audio -> one output bundle -> one upload unit
 "#,
         ext = defaults.extension,

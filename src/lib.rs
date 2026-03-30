@@ -110,6 +110,14 @@ pub struct BundleMetadata {
     pub compression: CompressionMetadata,
     pub source_audio: SourceAudioMetadata,
     pub output_audio: OutputAudioMetadata,
+    pub metadata_artifacts: MetadataArtifacts,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MetadataArtifacts {
+    pub ffprobe_relpath: String,
+    pub mdls_relpath: String,
+    pub xattrs_relpath: String,
 }
 
 fn run_command(program: &str, args: &[&str]) -> Result<Vec<u8>, String> {
@@ -121,6 +129,14 @@ fn run_command(program: &str, args: &[&str]) -> Result<Vec<u8>, String> {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("`{program}` failed: {stderr}"));
     }
+    Ok(output.stdout)
+}
+
+fn run_command_allow_failure(program: &str, args: &[&str]) -> Result<Vec<u8>, String> {
+    let output = Command::new(program)
+        .args(args)
+        .output()
+        .map_err(|err| format!("failed to run `{program}`: {err}"))?;
     Ok(output.stdout)
 }
 
@@ -140,6 +156,49 @@ fn ffprobe_json(input: &Path) -> Result<Value, String> {
         ],
     )?;
     serde_json::from_slice(&stdout).map_err(|err| format!("failed to parse ffprobe json: {err}"))
+}
+
+fn ffprobe_json_bytes(input: &Path) -> Result<Vec<u8>, String> {
+    run_command(
+        "ffprobe",
+        &[
+            "-v",
+            "error",
+            "-show_format",
+            "-show_streams",
+            "-show_chapters",
+            "-show_programs",
+            "-print_format",
+            "json",
+            input
+                .to_str()
+                .ok_or_else(|| format!("non-utf8 input path: {}", input.display()))?,
+        ],
+    )
+}
+
+fn write_source_metadata_artifacts(input: &Path, output_dir: &Path) -> Result<MetadataArtifacts, String> {
+    let input_str = input
+        .to_str()
+        .ok_or_else(|| format!("non-utf8 input path: {}", input.display()))?;
+
+    let ffprobe_json = ffprobe_json_bytes(input)?;
+    fs::write(output_dir.join("source-ffprobe.json"), ffprobe_json)
+        .map_err(|err| format!("failed to write ffprobe metadata: {err}"))?;
+
+    let mdls_text = run_command("mdls", &[input_str])?;
+    fs::write(output_dir.join("source-mdls.txt"), mdls_text)
+        .map_err(|err| format!("failed to write mdls metadata: {err}"))?;
+
+    let xattrs_text = run_command_allow_failure("xattr", &["-l", input_str])?;
+    fs::write(output_dir.join("source-xattrs.txt"), xattrs_text)
+        .map_err(|err| format!("failed to write xattr metadata: {err}"))?;
+
+    Ok(MetadataArtifacts {
+        ffprobe_relpath: "source-ffprobe.json".to_string(),
+        mdls_relpath: "source-mdls.txt".to_string(),
+        xattrs_relpath: "source-xattrs.txt".to_string(),
+    })
 }
 
 fn extract_source_audio_metadata(input: &Path) -> Result<SourceAudioMetadata, String> {
@@ -254,6 +313,7 @@ pub fn compress(request: &CompressRequest) -> Result<CompressResult, String> {
     fs::create_dir_all(&request.output_dir)
         .map_err(|err| format!("failed to create {}: {err}", request.output_dir.display()))?;
 
+    let metadata_artifacts = write_source_metadata_artifacts(&request.input, &request.output_dir)?;
     let source_audio = extract_source_audio_metadata(&request.input)?;
     let output_audio_path = request
         .output_dir
@@ -307,6 +367,7 @@ pub fn compress(request: &CompressRequest) -> Result<CompressResult, String> {
         },
         source_audio,
         output_audio,
+        metadata_artifacts,
     };
 
     let bundle_path = request.output_dir.join("bundle.json");
@@ -420,7 +481,7 @@ pub fn load_bundle_metadata(bundle_dir: impl AsRef<Path>) -> Result<BundleMetada
 
 #[cfg(test)]
 mod tests {
-    use super::{BundleMetadata, CompressionMetadata, OutputAudioMetadata, ProducerMetadata, SourceAudioMetadata, bundle_dir_for_input, is_supported_audio_file, load_bundle_metadata};
+    use super::{BundleMetadata, CompressionMetadata, MetadataArtifacts, OutputAudioMetadata, ProducerMetadata, SourceAudioMetadata, bundle_dir_for_input, is_supported_audio_file, load_bundle_metadata};
     use std::fs;
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -488,6 +549,11 @@ mod tests {
                 duration_ms: 1000,
                 sample_rate_hz: 16_000,
                 channels: 1,
+            },
+            metadata_artifacts: MetadataArtifacts {
+                ffprobe_relpath: "source-ffprobe.json".to_string(),
+                mdls_relpath: "source-mdls.txt".to_string(),
+                xattrs_relpath: "source-xattrs.txt".to_string(),
             },
         };
         fs::write(
